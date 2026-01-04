@@ -102,21 +102,38 @@ class ShopeeScraper:
                 page.goto(self.base_url, wait_until="domcontentloaded", timeout=60000)
 
             print(f"Homepage loaded! URL: {page.url}")
-            input("Press ENTER to continue to search...")
+
+            # Use search bar (human-like behavior)
+            print(f"Searching for: {keyword}")
+            search_box = page.locator('.shopee-searchbar-input__input').first
+            search_box.click()
+            time.sleep(0.5)
+
+            # Type slowly like human
+            for char in keyword:
+                search_box.type(char, delay=50)
+
+            time.sleep(0.5)
+            page.keyboard.press("Enter")
+            print("Search submitted!")
+
+            # Wait for results to load
+            time.sleep(3)
 
             for page_num in range(max_pages):
-                search_url = f"{self.base_url}/search?keyword={keyword}&page={page_num}"
-                print(f"Navigating to: {search_url}")
+                if page_num > 0:
+                    # For page 2+, click next or navigate
+                    search_url = f"{self.base_url}/search?keyword={keyword}&page={page_num}"
+                    page.goto(search_url, wait_until="domcontentloaded", timeout=60000)
+                    time.sleep(2)
+
+                print(f"Scraping page {page_num + 1}...")
 
                 try:
-                    page.goto(search_url, wait_until="domcontentloaded", timeout=60000)
-
                     # Check for CAPTCHA
                     if "verify/captcha" in page.url or "verify/traffic" in page.url:
                         print("\n*** CAPTCHA DETECTED! ***")
-                        print("Please solve the CAPTCHA in the browser...")
-                        input("Press ENTER after solving CAPTCHA...")
-                        page.goto(search_url, wait_until="domcontentloaded", timeout=60000)
+                        input("Solve CAPTCHA, then press ENTER...")
 
                     # Wait for products to load
                     page.wait_for_selector('.shopee-search-item-result__item', timeout=30000)
