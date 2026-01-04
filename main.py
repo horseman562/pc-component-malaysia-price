@@ -7,6 +7,12 @@ from scraper.shopee import ShopeeScraper
 from database.db import get_all_products
 
 
+def login(args):
+    """Login to Shopee and save session"""
+    scraper = ShopeeScraper()
+    scraper.login()
+
+
 def scrape(args):
     """Run the scraper"""
     print(f"Starting scrape for: {args.keyword}")
@@ -47,6 +53,10 @@ def list_products(args):
 def main():
     parser = argparse.ArgumentParser(description='Scrap-RAM: Hardware Price Tracker')
     subparsers = parser.add_subparsers(dest='command', help='Commands')
+
+    # Login command
+    login_parser = subparsers.add_parser('login', help='Login to Shopee and save session')
+    login_parser.set_defaults(func=login)
 
     # Scrape command
     scrape_parser = subparsers.add_parser('scrape', help='Scrape products')

@@ -3,11 +3,15 @@ from bs4 import BeautifulSoup
 import time
 import re
 import sys
+import os
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from config import SCRAPER_CONFIG
+from config import SCRAPER_CONFIG, CHROME_CONFIG
 from database.db import get_category_id, get_platform_id, save_product, save_price
+
+# Session file path
+SESSION_FILE = Path(__file__).parent.parent / "shopee_session.json"
 
 
 class ShopeeScraper:
@@ -17,25 +21,87 @@ class ShopeeScraper:
         self.platform_id = get_platform_id('Shopee')
         self.base_url = "https://shopee.com.my"
 
+    def login(self):
+        """Open Chromium browser for manual login"""
+        print("Opening Chromium browser...")
+        print("Please:")
+        print("  1. Login to Shopee")
+        print("  2. Once logged in, press ENTER here")
+        print("-" * 40)
+
+        chromium_profile = str(Path(__file__).parent.parent / "chromium_data")
+
+        with sync_playwright() as p:
+            context = p.chromium.launch_persistent_context(
+                user_data_dir=chromium_profile,
+                headless=False,
+                viewport={'width': 1920, 'height': 1080},
+                args=[
+                    "--disable-blink-features=AutomationControlled",
+                    "--disable-infobars",
+                    "--start-maximized"
+                ]
+            )
+
+            # Patch navigator.webdriver
+            context.add_init_script("""
+                Object.defineProperty(navigator, 'webdriver', {
+                    get: () => undefined
+                });
+            """)
+
+            page = context.pages[0] if context.pages else context.new_page()
+            page.goto(self.base_url)
+
+            input("\nPress ENTER after you've logged in...")
+
+            print("Session saved! You can now run scrape commands.")
+            context.close()
+
+    def has_session(self):
+        """Check if saved session exists"""
+        return SESSION_FILE.exists()
+
     def search_products(self, keyword, category_slug='ram', max_pages=1):
-        """Search for products and save to database"""
+        """Search for products using your Chrome profile"""
+        print("CLOSE Chrome first if it's runningasdas!")
+        print("-" * 40)
+
         category_id = get_category_id(category_slug)
         all_products = []
 
         with sync_playwright() as p:
-            browser = p.chromium.launch(headless=self.headless)
-            context = browser.new_context(
+            # Use Chromium with separate profile folder
+            chromium_profile = str(Path(__file__).parent.parent / "chromium_data")
+
+            context = p.chromium.launch_persistent_context(
+                user_data_dir=chromium_profile,
+                headless=self.headless,
                 viewport={'width': 1920, 'height': 1080},
-                user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                args=[
+                    "--disable-blink-features=AutomationControlled",
+                    "--disable-infobars",
+                    "--start-maximized"
+                ]
             )
-            page = context.new_page()
+
+            # Patch navigator.webdriver BEFORE page loads
+            context.add_init_script("""
+                Object.defineProperty(navigator, 'webdriver', {
+                    get: () => undefined
+                });
+            """)
+
+            # Get or create page
+            page = context.pages[0] if context.pages else context.new_page()
+            print("Browser ready!")
 
             for page_num in range(max_pages):
                 search_url = f"{self.base_url}/search?keyword={keyword}&page={page_num}"
-                print(f"Scraping: {search_url}")
+                print(f"Navigating to: {search_url}")
 
                 try:
-                    page.goto(search_url, wait_until='networkidle', timeout=60000)
+                    page.goto(search_url, wait_until="domcontentloaded", timeout=60000)
 
                     # Wait for products to load
                     page.wait_for_selector('.shopee-search-item-result__item', timeout=30000)
@@ -58,10 +124,9 @@ class ShopeeScraper:
 
                 except Exception as e:
                     print(f"Error scraping page {page_num + 1}: {e}")
-                    # Take screenshot for debugging
                     page.screenshot(path=f"error_page_{page_num}.png")
 
-            browser.close()
+            context.close()
 
         return all_products
 

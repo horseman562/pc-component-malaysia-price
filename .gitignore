@@ -23,3 +23,7 @@ config.py
 # OS
 .DS_Store
 Thumbs.db
+
+#chrmoum
+chromium_data
+chrome_data
