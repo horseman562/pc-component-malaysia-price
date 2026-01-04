@@ -1,4 +1,5 @@
 from playwright.sync_api import sync_playwright
+from undetected_playwright import stealth_sync
 from bs4 import BeautifulSoup
 import time
 import re
@@ -43,12 +44,8 @@ class ShopeeScraper:
                 ]
             )
 
-            # Patch navigator.webdriver
-            context.add_init_script("""
-                Object.defineProperty(navigator, 'webdriver', {
-                    get: () => undefined
-                });
-            """)
+            # Apply undetected stealth
+            context = stealth_sync(context)
 
             page = context.pages[0] if context.pages else context.new_page()
             page.goto(self.base_url)
@@ -85,16 +82,27 @@ class ShopeeScraper:
                 ]
             )
 
-            # Patch navigator.webdriver BEFORE page loads
-            context.add_init_script("""
-                Object.defineProperty(navigator, 'webdriver', {
-                    get: () => undefined
-                });
-            """)
+            # Apply undetected stealth
+            context = stealth_sync(context)
 
             # Get or create page
             page = context.pages[0] if context.pages else context.new_page()
-            print("Browser ready!")
+            print("Browser ready with stealth!")
+
+            # First go to homepage
+            print("Going to Shopee homepage first...")
+            page.goto(self.base_url, wait_until="domcontentloaded", timeout=60000)
+            time.sleep(2)
+
+            # Check for CAPTCHA on homepage
+            if "verify/captcha" in page.url or "verify/traffic" in page.url:
+                print("\n*** CAPTCHA DETECTED! ***")
+                print("Please solve the CAPTCHA in the browser...")
+                input("Press ENTER after solving CAPTCHA...")
+                page.goto(self.base_url, wait_until="domcontentloaded", timeout=60000)
+
+            print(f"Homepage loaded! URL: {page.url}")
+            input("Press ENTER to continue to search...")
 
             for page_num in range(max_pages):
                 search_url = f"{self.base_url}/search?keyword={keyword}&page={page_num}"
@@ -102,6 +110,13 @@ class ShopeeScraper:
 
                 try:
                     page.goto(search_url, wait_until="domcontentloaded", timeout=60000)
+
+                    # Check for CAPTCHA
+                    if "verify/captcha" in page.url or "verify/traffic" in page.url:
+                        print("\n*** CAPTCHA DETECTED! ***")
+                        print("Please solve the CAPTCHA in the browser...")
+                        input("Press ENTER after solving CAPTCHA...")
+                        page.goto(search_url, wait_until="domcontentloaded", timeout=60000)
 
                     # Wait for products to load
                     page.wait_for_selector('.shopee-search-item-result__item', timeout=30000)
